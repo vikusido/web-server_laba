@@ -128,10 +128,10 @@ def manage_vm(action, vm_name):
             dom.create()
             st.success(f"Virtual machine '{vm_name}' started.")
         elif action == "shutdown":
-            dom.shutdown()
+            dom.destroy()
             st.success(f"Virtual machine '{vm_name}' stopped.")
         elif action == "delete":
-            dom.underfine()
+            dom.undefine()
             st.success(f"Virtual machine '{vm_name}' deleted.")
     except libvirt.libvirtError as e:
         st.error(f"Failed to {action} virtual machine: {e}")
@@ -166,7 +166,7 @@ def main():
         if st.button("Start VM"):
             manage_vm("start", vm_name)
         if st.button("Stop VM"):
-            manage_vm("stop", vm_name)
+            manage_vm("shutdown", vm_name)
         if st.button("Delete VM"):
             manage_vm("delete", vm_name)
 
