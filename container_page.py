@@ -1,22 +1,22 @@
 import streamlit as st
 import docker
 import time
+import threading
+import os
 
-def calculate_price(cpu, ram, storage, duration):
+# Создаем клиент Docker
+client = docker.from_env()
+
+# Функция для расчета стоимости
+def calculate_price(cpu, ram, duration):
     base_price = 1000
     cpu_cost = cpu * 20
     ram_cost = ram * 15
-    storage_cost = storage * 10
     duration_cost = duration * 50
-    return base_price + cpu_cost + ram_cost + storage_cost + duration_cost
+    return base_price + cpu_cost + ram_cost + duration_cost
 
-client = docker.from_env()
-
-# Функция для создания контейнера без получения SSH-порта сразу
-
-import os
-
-def create_container(cpu, ram, storage, os_name, location, duration):
+# Функция для создания контейнера
+def create_container(cpu, ram, os_name, duration):
     container_name = f"container_{time.strftime('%Y%m%d-%H%M%S')}"
     
     os_images = {
@@ -34,7 +34,6 @@ def create_container(cpu, ram, storage, os_name, location, duration):
     mount_path = os.path.join(os.path.expanduser("~"), "docker_data", container_name)
     os.makedirs(mount_path, exist_ok=True)
 
-    
     try:
         container = client.containers.create(
             image=image,
@@ -48,13 +47,16 @@ def create_container(cpu, ram, storage, os_name, location, duration):
             command="/bin/bash -c 'apt update && apt install -y openssh-server && service ssh start && tail -f /dev/null'"
         )
         st.success(f"Контейнер '{container_name}' успешно создан, но пока не запущен.")
+        st.info(f"Контейнер будет удалён через {duration} минут.")
+        
+        # Запускаем таймер для удаления контейнера
+        delete_container_after_timeout(container_name, duration)
         return container_name
     except Exception as e:
         st.error(f"Ошибка при создании контейнера: {e}")
-
+        return None
 
 # Функция для запуска контейнера и получения SSH-порта
-
 def start_container(container_name):
     try:
         container = client.containers.get(container_name)
@@ -66,7 +68,6 @@ def start_container(container_name):
         ports = container.attrs['NetworkSettings']['Ports']
         ssh_port = ports['22/tcp'][0]['HostPort'] if ports and ports['22/tcp'] else None
 
-        
         if ssh_port:
             st.success(f"Контейнер '{container_name}' запущен. SSH доступен на порте {ssh_port}.")
         else:
@@ -78,6 +79,7 @@ def start_container(container_name):
     except Exception as e:
         st.error(f"Ошибка в запуске контейнера: {e}")
 
+# Функция для управления контейнером
 def manage_container(action, container_name):
     try:
         container = client.containers.get(container_name)
@@ -88,58 +90,110 @@ def manage_container(action, container_name):
             st.success(f"Контейнер '{container_name}' остановлен.")
         elif action == "delete":
             container.remove()
+            st.session_state["container_deleted"] = True
             st.success(f"Контейнер '{container_name}' удалён.")
     except docker.errors.NotFound:
         st.error(f"Контейнер '{container_name}' не найден.")
     except Exception as e:
         st.error(f"Ошибка в упралении контейнером: {e}")
 
+# Функция для удаления контейнера через указанное время
+def delete_container_after_timeout(container_name, duration):
+    time.sleep(duration * 60)  # Исправлено: duration в минутах
+    try:
+        container = client.containers.get(container_name)
+        state = container.status
+        if state == "running":
+            container.stop()  # Останавливаем контейнер, если он запущен
+        container.remove()  # Удаляем контейнер
+        st.success(f"Контейнер '{container_name}' удален по истечении времени аренды.")
+    except Exception as e:
+        st.error(f"Ошибка при удалении контейнера: {e}")
+
+# Функция для отображения всех контейнеров
+def show_all():
+    try:
+        st.header("Все контейнеры Docker:")
+        containers = client.containers.list(all=True)
+        
+        if not containers:
+            st.write("Контейнеры не найдены")
+        else:
+            for container in containers:
+                name = container.name
+                status = container.status  # Текущее состояние контейнера
+                st.write(f"- **{name}**: {status}")
+    except docker.errors.DockerException as e:
+        st.error(f"Ошибка подключения к Docker: {e}")
+    except Exception as e:
+        st.error(f"Произошла ошибка: {e}")
+
+# Основная страница контейнеров
 def container_page():
-    port = None
-    st.header("Страница о Контейнерах")
-    st.write("Информация о контейнерах...")
-    st.subheader("Наши тарифные планы для Контейнеров")
-    st.write("Здесь будет таблица с тарифами и описаниями контейнеров.")
-    
+    if "container_deleted" in st.session_state and st.session_state["container_deleted"]:
+        st.success("Контейнер успешно удален.")
+        st.session_state["container_deleted"] = False
+
+    st.title("Конфигуратор аренды контейнеров")
     with st.container():
-        st.header("Параметры контейнера")
-        cpu = st.slider("CPU Cores", min_value=1, max_value=32, value=4)
-        ram = st.slider("RAM (GB)", min_value=1, max_value=128, value=8)
-        storage = st.number_input("Storage (GB)", min_value=10, max_value=1000, step=10)
-        distribute = ["Ubuntu", "CentOS", "Fedora"]
-        os_name = st.selectbox("Операционная система", options=distribute)
-        location = st.selectbox("Location", ["US East", "US West", "Europe", "Asia"])
-        duration = st.slider("Длительность аренды (минуты)", min_value=1, max_value=60, value=10)
+        st.header("Что такое контейнер?")
+        st.write("Контейнер – это изолированная среда для запуска приложений. Он использует ядро хостовой системы, но изолирует процессы, файловую систему и сеть.")
+        st.subheader("Как начать работу?")
+        st.write("Вы получаете SSH доступ к контейнеру.")
+        st.subheader("Преимущества контейнеров")
+        
+    st.header("Параметры")
+    cpu = st.slider("CPU Cores", min_value=1, max_value=32, value=4)
+    ram = st.slider("RAM (GB)", min_value=1, max_value=128, value=8)
+    distribute = ["Ubuntu", "CentOS", "Fedora"]
+    os_name = st.selectbox("Операционная система", options=distribute)
+    duration = st.slider("Длительность аренды (минуты)", min_value=1, max_value=60, value=10)
     
     with st.container():
         st.header("Краткая выжимка")
         st.write(f"**CPU Cores:** {cpu}")
         st.write(f"**RAM:** {ram} GB")
-        st.write(f"**Storage:** {storage} GB")
         st.write(f"**Операционная система:** {os_name}")
         st.write(f"**Длительность аренды:** {duration} минут")
     
-    price = calculate_price(cpu, ram, storage, duration)
+    price = calculate_price(cpu, ram, duration)
     with st.container():
         st.subheader("Стоимость аренды")
         st.write(f"**₽{price:.2f}**")
     
     if st.button("Арендовать сейчас"):
-        container_name = create_container(cpu, ram, storage, os_name, location, duration)
+        try:
+            container_name = create_container(cpu, ram, os_name, duration)
+            if container_name:
+                st.session_state.container_created = True
+        except Exception as e:
+            st.error(str(e))
+            st.session_state.container_created = False
     
-    with st.container():
-        container_name = st.text_input("Введите имя контейнера для управления")
-        if container_name:
-            if st.button("Start"):
-                port = manage_container("start", container_name)
-                if port:
-                    st.write(f"SSH доступен на порту {port}")
-            if st.button("Stop"):
-                manage_container("stop", container_name)
-            if st.button("Delete"):
-                manage_container("delete", container_name)
-        else:
-            st.warning("Введите имя объекта для управления.")
+    if st.button("Показать все контейнеры"):
+        show_all()
+    
+    # Используем st.session_state для сохранения состояния текстового поля
+    if "container_name" not in st.session_state:
+        st.session_state.container_name = ""
+    
+    container_name = st.text_input(
+        "Введите имя контейнера для управления",
+        value=st.session_state.container_name
+    )
+    st.session_state.container_name = container_name
+    
+    if container_name:
+        if st.button("Запустить контейнер"):
+            port = manage_container("start", container_name)
+            if port:
+                st.write(f"SSH доступен на порту {port}")
+        if st.button("Остановить контейнер"):
+            manage_container("stop", container_name)
+        if st.button("Удалить контейнер"):
+            manage_container("delete", container_name)
+    else:
+        st.warning("Введите имя контейнера для управления.")
 
 if __name__ == "__main__":
     container_page()
