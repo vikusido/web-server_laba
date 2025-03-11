@@ -5,6 +5,7 @@ import subprocess
 import time
 import requests
 import sys
+import threading
 
 private_key_path, public_key=None, None
 # Словарь с ISO-образами для каждой ОС
@@ -60,8 +61,8 @@ def download_iso(iso_url, save_path):
     except IOError as e:
         st.error(f"Ошибка ввода/вывода при сохранении файла {save_path}: {e}")
     finally:
-      if 'progress_bar' in locals():
-        progress_bar.empty()
+        if 'progress_bar' in locals():
+            progress_bar.empty()
 
 # Пример функции для выбора и скачивания ISO-образа
 def get_os_image(os_name):
@@ -88,13 +89,32 @@ def create_disk(disk_path, size):
         st.success(f"Создан диск по {disk_path} размера {size}GB.")
     except subprocess.CalledProcessError as e:
         st.error(f"Не получилось создать образ диска: {e}")
-def create_vm(cpu, ram, storage, os_name, location, duration):
 
-    vm_name=time.strftime("%Y%m%d-%H%M%S")
+
+def delete_vm_after_timeout(vm_name, duration):
+    time.sleep(duration * 60)  # Ждём истечения таймера
+    try:
+        conn = libvirt.open('qemu:///system')
+        if conn is None:
+            st.error("Не удалось открыть соединение с libvirt.")
+            return
+        dom = conn.lookupByName(vm_name)
+        if dom is not None:
+            state, _ = dom.state()
+            if state == libvirt.VIR_DOMAIN_RUNNING:
+                dom.destroy()
+            dom.undefine()
+            st.info(f"Виртуальная машина '{vm_name}' удалена по истечении времени аренды.")
+        conn.close()
+    except libvirt.libvirtError as e:
+        st.error(f"Ошибка при удалении ВМ: {e}")
+
+
+def create_vm(cpu, ram, storage, os_name, location, duration):
+    vm_name = time.strftime("%Y%m%d-%H%M%S")
     disk_path = f"/var/lib/libvirt/images/{vm_name}.qcow2"
-    os_image=get_os_image(os_name)
+    os_image = get_os_image(os_name)
     create_disk(disk_path, storage)
-    global private_key_path, public_key
     private_key_path, public_key = generate_ssh_keys(vm_name)
     st.session_state["private_key_path"] = private_key_path
 
@@ -137,7 +157,6 @@ def create_vm(cpu, ram, storage, os_name, location, duration):
                     <target port='22'/>
                 </port>
             </interface>
-
         </devices>
         <metadata>
             <cloud-init>
@@ -150,17 +169,14 @@ def create_vm(cpu, ram, storage, os_name, location, duration):
             -{public_key}
         shell: /bin/bash
     ]]></user-data>
-        </cloud-init>
-    </metadata>
+            </cloud-init>
+        </metadata>
     </domain>
     """
 
-    print("VM XML configuration:")
-    print(vm_xml)
-
     conn = libvirt.open('qemu:///system')
     if conn is None:
-        raise Exception("Не получилось окрыть соединение с libvirt.")
+        raise Exception("Не получилось открыть соединение с libvirt.")
 
     try:
         st.warning("Попытка определить виртуальную машину в libvirt...")
@@ -170,10 +186,14 @@ def create_vm(cpu, ram, storage, os_name, location, duration):
             st.error("Не получилось создать виртуальную машину: ")
         else:
             st.success("Виртуальная машина успешно определена")
+            # Вызов функции для удаления ВМ после истечения времени аренды
+            st.info(f"Виртуальная машина будет удалена через {duration} минут.")
+            delete_vm_after_timeout(vm_name, duration)
     except libvirt.libvirtError as e:
         st.error(f"Ошибка в создании виртуальной машины: {e}")
     finally:
         conn.close()
+
 def manage_vm(action, vm_name):
     conn=libvirt.open('qemu:///system')
     if conn is None:
@@ -200,7 +220,7 @@ def manage_vm(action, vm_name):
             st.success(f"Виртуальная машина '{vm_name}' остановлена.")
         elif action == "delete":
             dom.undefine()
-            st.success(f"Виртуальная машина '{vm_name}' удалена.")
+            st.session_state["vm_deleted"] = True
     except libvirt.libvirtError as e:
         st.error(f"Ошибка в {action} виртуальной машины: {e}")
     finally:
@@ -248,6 +268,10 @@ def show_all():
         exit(1)
 
 def vm_page():
+    if "vm_deleted" in st.session_state and st.session_state["vm_deleted"]:
+        st.success("Виртуальная машина успешно удалена.")
+        st.session_state["vm_deleted"] = False
+
     st.title("Конфигуратор аренды виртуальных машин")
     with st.container():
         st.header("Что такое виртуальная машина?")
@@ -288,6 +312,9 @@ def vm_page():
         except Exception as e:
             st.error(str(e))
             st.session_state.vm_created = False
+    if st.session_state.get("vm_deleted", False):
+        st.success("Виртуальная машина успешно удалена.")
+        st.session_state["vm_deleted"] = False
     if st.button("Показать все виртуальные машины"):
         show_all()
         # Проверка на наличие введенного имени
