@@ -30,16 +30,38 @@ def generate_ssh_keys(vm_name):
 
 # Функция для скачивания ISO-образа
 def download_iso(iso_url, save_path):
-    response = requests.get(iso_url, stream=True)
-    if response.status_code == 200:
-        print ("SUCCESS SUKA ")
-        with open(save_path, 'wb') as file:
-            for chunk in response.iter_content(chunk_size=8192):
-                if chunk:
-                    file.write(chunk)
-        st.success(f"ISO образ загружен в {save_path}")
-    else:
-        st.error(f"Не получилось загрузить {iso_url}")
+    st.info(f"Начинается загрузка ISO-образа по ссылке: {iso_url}...")
+    try:
+        response = requests.get(iso_url, stream=True)
+        response.raise_for_status()
+        total_size = int(response.headers.get('content-length', 0))
+        chunk_size = 8192 
+        bytes_dowloaded = 0
+        progress_bar = st.progress(0)
+
+        if response.status_code == 200:
+            with open(save_path, 'wb') as file:
+                for chunk in response.iter_content(chunk_size=chunk_size):
+                    if chunk:
+                        file.write(chunk)
+                        bytes_dowloaded += len(chunk)
+                        if total_size > 0:
+                            progress = min(1.0, bytes_dowloaded / total_size)
+                            progress_bar.progress(progress)
+                        else:
+                            progress_bar.progress(bytes_dowloaded/1000000) 
+            st.success(f"ISO-образ успешно загружен в: {save_path}")
+            st.balloons()
+            print(f"ISO-образ скачен в {save_path}")
+        else:   
+            print(f"Failed to download {iso_url}")
+    except requests.exceptions.RequestException as e:
+        st.error(f"Ошибка при загрузке {iso_url}: {e}")  
+    except IOError as e:
+        st.error(f"Ошибка ввода/вывода при сохранении файла {save_path}: {e}")
+    finally:
+      if 'progress_bar' in locals():
+        progress_bar.empty()
 
 # Пример функции для выбора и скачивания ISO-образа
 def get_os_image(os_name):
