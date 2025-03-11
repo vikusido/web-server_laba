@@ -14,6 +14,8 @@ client = docker.from_env()
 
 # Функция для создания контейнера без получения SSH-порта сразу
 
+import os
+
 def create_container(cpu, ram, storage, os_name, location, duration):
     container_name = f"container_{time.strftime('%Y%m%d-%H%M%S')}"
     
@@ -28,22 +30,28 @@ def create_container(cpu, ram, storage, os_name, location, duration):
     
     image = os_images[os_name]
     
+    # Создаём папку для монтирования вручную
+    mount_path = os.path.join(os.path.expanduser("~"), "docker_data", container_name)
+    os.makedirs(mount_path, exist_ok=True)
+
+    
     try:
         container = client.containers.create(
-            image,
+            image=image,
             name=container_name,
             cpu_period=100000,
-            cpu_quota=cpu * 10000,
+            cpu_quota=cpu * 100000,  # Исправлено
             mem_limit=f"{ram}g",
-            volumes={f"/data/{container_name}": {'bind': '/data', 'mode': 'rw'}},
+            volumes={mount_path: {'bind': '/data', 'mode': 'rw'}},
             tty=True,
-            ports={'22/tcp': None},
+            ports={'22/tcp': 0},  # Автоматическое назначение порта
             command="/bin/bash -c 'apt update && apt install -y openssh-server && service ssh start && tail -f /dev/null'"
         )
-        st.success(f"Container '{container_name}' created successfully but not started yet.")
+        st.success(f"Контейнер '{container_name}' успешно создан, но пока не запущен.")
         return container_name
     except Exception as e:
-        st.error(f"Failed to create container: {e}")
+        st.error(f"Ошибка при создании контейнера: {e}")
+
 
 # Функция для запуска контейнера и получения SSH-порта
 
@@ -55,20 +63,20 @@ def start_container(container_name):
         # Ждем, чтобы Docker назначил порт
         time.sleep(2)
         container.reload()
-        
         ports = container.attrs['NetworkSettings']['Ports']
         ssh_port = ports['22/tcp'][0]['HostPort'] if ports and ports['22/tcp'] else None
+
         
         if ssh_port:
-            st.success(f"Container '{container_name}' started. SSH is available on port {ssh_port}.")
+            st.success(f"Контейнер '{container_name}' запущен. SSH доступен на порте {ssh_port}.")
         else:
-            st.warning(f"Container '{container_name}' started, but SSH port not found.")
+            st.warning(f"Контейнер '{container_name}' запущен, но SSH порт не найден.")
         
         return ssh_port
     except docker.errors.NotFound:
-        st.error(f"Container '{container_name}' not found.")
+        st.error(f"Контейнер '{container_name}' не найден.")
     except Exception as e:
-        st.error(f"Error starting container: {e}")
+        st.error(f"Ошибка в запуске контейнера: {e}")
 
 def manage_container(action, container_name):
     try:
@@ -77,14 +85,14 @@ def manage_container(action, container_name):
             return start_container(container_name)
         elif action == "stop":
             container.stop()
-            st.success(f"Container '{container_name}' stopped.")
+            st.success(f"Контейнер '{container_name}' остановлен.")
         elif action == "delete":
             container.remove()
-            st.success(f"Container '{container_name}' removed.")
+            st.success(f"Контейнер '{container_name}' удалён.")
     except docker.errors.NotFound:
-        st.error(f"Container '{container_name}' not found.")
+        st.error(f"Контейнер '{container_name}' не найден.")
     except Exception as e:
-        st.error(f"Error managing container: {e}")
+        st.error(f"Ошибка в упралении контейнером: {e}")
 
 def container_page():
     port = None
