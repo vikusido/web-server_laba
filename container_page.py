@@ -100,14 +100,22 @@ def manage_container(action, container_name):
     try:
         container = client.containers.get(container_name)
         if action == "start":
-            return start_container(container_name)
+            if container.status != "running":
+                return start_container(container_name)
+            else:
+                st.warning(f"Контейнер '{container_name}' уже запущен.")
         elif action == "stop":
-            container.stop()
-            st.success(f"Контейнер '{container_name}' остановлен.")
+            if container.status == "running":
+                container.stop()
+                st.success(f"Контейнер '{container_name}' остановлен.")
+            else:
+                st.warning(f"Контейнер '{container_name}' не запущен, остановка не нужна.")
         elif action == "delete":
-            container.remove()
-            st.session_state["container_deleted"] = True
-            st.success(f"Контейнер '{container_name}' удалён.")
+            if container.status == "exited" or container.status == "created":
+                container.remove()
+                st.success(f"Контейнер '{container_name}' удалён.")
+            elif container.status == "running":
+                st.warning(f"Контейнер '{container_name}' запущен, сначала остановите.")
     except docker.errors.NotFound:
         st.error(f"Контейнер '{container_name}' не найден.")
     except Exception as e:
@@ -149,7 +157,7 @@ def show_all():
                 name = container.name
                 status = container.status  # Текущее состояние контейнера
                 translated_status = status_translation.get(status, status)
-                st.write(f"- **{name}**: {status}")
+                st.write(f"- **{name}**: {translated_status}")
     except docker.errors.DockerException as e:
         st.error(f"Ошибка подключения к Docker: {e}")
     except Exception as e:
