@@ -10,7 +10,7 @@ import threading
 private_key_path, public_key=None, None
 # Словарь с ISO-образами для каждой ОС
 OS_IMAGES = {
-    "Ubuntu": "https://releases.ubuntu.com/20.04/ubuntu-20.04.6-desktop-amd64.iso",
+    "Ubuntu 20.04": "https://releases.ubuntu.com/20.04/ubuntu-20.04.6-desktop-amd64.iso",
     "CentOS": "https://mirrors.centos.org/mirrorlist?path=/10-stream/BaseOS/x86_64/iso/CentOS-Stream-10-latest-x86_64-dvd1.iso&redirect=1&protocol=https",
     "Fedora": "https://download.fedoraproject.org/pub/fedora/linux/releases/41/Workstation/x86_64/iso/Fedora-Workstation-Live-x86_64-41-1.4.iso"
 }
@@ -114,7 +114,7 @@ def create_vm(cpu, ram, storage, os_name, location, duration):
     st.session_state["private_key_path"] = private_key_path
 
     st.header(f"Создание машины со следующими параметрами:")
-    st.markdown(f"**CPU:** {cpu}  \n**RAM:** {ram}GB  \n**Storage:** {storage}GB  \n**OS:** {os_name}  \n**Location:** {location}  \n**Duration:** {duration}")
+    st.markdown(f"**CPU:** {cpu}  \n**RAM:** {ram}GB  \n**Storage:** {storage}GB  \n**Дистрибутив Linux:** {os_name}  \n**Локация:** {location}  \n**Длительность аренды в минутах:** {duration}")
 
     st.write(f"Путь образа диска: {disk_path}")
 
@@ -275,13 +275,17 @@ def vm_page():
         st.subheader("Как начать работу?")
         st.write("Вы получаете ssh ключ к доступу VM")
         st.subheader("Преимущества виртуальной машины")
+        st.write("1. Тестирование в безопасной среде.")
+        st.write("2. Эмуляция среды.")
+        st.write("3. Запуск другой ОС.")
+        st.write("4. Создание виртуального сервера.")
     st.header("Параметры")
     cpu = st.slider("CPU Cores", min_value=1, max_value=32, value=4)
     ram = st.slider("RAM (GB)", min_value=1, max_value=128, value=8)
     storage = st.number_input("Storage (GB)", min_value=10, max_value=1000, step=10)
-    distribute = ["Ubuntu", "CentOS", "Fedora"]
+    distribute = ["Ubuntu 20.04", "CentOS", "Fedora"]
     os_name = st.selectbox("Дистрибутив Linux", options=distribute)
-    location = st.selectbox("Location", ["US East", "US West", "Europe", "Asia"])
+    location = st.selectbox("Локация", ["US East", "US West", "Europe", "Asia"])
     duration = st.slider("Длительность аренды (минуты)", min_value=1, max_value=60, value=10)
 
     with st.container():
