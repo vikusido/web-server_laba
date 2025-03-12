@@ -35,7 +35,7 @@ def create_container(cpu, ram, os_name, duration):
     container_name = f"container_{time.strftime('%Y%m%d-%H%M%S')}"
     
     os_images = {
-        "Ubuntu": "ubuntu:20.04",
+        "Ubuntu 20.04": "ubuntu:20.04",
         "CentOS": "centos:8",
         "Fedora": "fedora:latest"
     }
@@ -134,7 +134,7 @@ def delete_container_after_timeout(container_name, duration):
             st.success(f"Контейнер '{container_name}' удален по истечении времени аренды.")
         except Exception as e:
             st.error(f"Ошибка при удалении контейнера: {e}")
-    threading.Thread(target=_delete_container, daemon=True).start
+    threading.Thread(target=_delete_container, daemon=True).start()
 
 # Функция для отображения всех контейнеров
 def show_all():
@@ -176,19 +176,22 @@ def container_page():
         st.subheader("Как начать работу?")
         st.write("Вы получаете SSH доступ к контейнеру.")
         st.subheader("Преимущества контейнеров")
+        st.write("1. Быстродействие.")
+        st.write("2. Универсальность и переносимость между операционными системами.")
+        st.write("3. Легковесность.")
         
     st.header("Параметры")
     cpu = st.slider("CPU Cores", min_value=1, max_value=32, value=4)
     ram = st.slider("RAM (GB)", min_value=1, max_value=128, value=8)
-    distribute = ["Ubuntu", "CentOS", "Fedora"]
-    os_name = st.selectbox("Операционная система", options=distribute)
+    distribute = ["Ubuntu 20.04", "CentOS", "Fedora"]
+    os_name = st.selectbox("Дистрибутив Linux", options=distribute)
     duration = st.slider("Длительность аренды (минуты)", min_value=1, max_value=60, value=10)
     
     with st.container():
         st.header("Краткая выжимка")
         st.write(f"**CPU Cores:** {cpu}")
         st.write(f"**RAM:** {ram} GB")
-        st.write(f"**Операционная система:** {os_name}")
+        st.write(f"**Дистрибутив Linux:** {os_name}")
         st.write(f"**Длительность аренды:** {duration} минут")
     
     price = calculate_price(cpu, ram, duration)
