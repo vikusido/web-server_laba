@@ -15,6 +15,7 @@ def calculate_price(cpu, ram, duration):
     duration_cost = duration * 50
     return base_price + cpu_cost + ram_cost + duration_cost
 
+#функция для установки образа
 def ensure_image_exists(image_name):
     try:
         client.images.get(image_name)
@@ -28,6 +29,7 @@ def ensure_image_exists(image_name):
             st.error(f"Не удалось загрузить образ '{image_name}': {e}")
             return False
     return True
+
 # Функция для создания контейнера
 def create_container(cpu, ram, os_name, duration):
     container_name = f"container_{time.strftime('%Y%m%d-%H%M%S')}"
@@ -113,16 +115,18 @@ def manage_container(action, container_name):
 
 # Функция для удаления контейнера через указанное время
 def delete_container_after_timeout(container_name, duration):
-    time.sleep(duration * 60)  # Исправлено: duration в минутах
-    try:
-        container = client.containers.get(container_name)
-        state = container.status
-        if state == "running":
-            container.stop()  # Останавливаем контейнер, если он запущен
-        container.remove()  # Удаляем контейнер
-        st.success(f"Контейнер '{container_name}' удален по истечении времени аренды.")
-    except Exception as e:
-        st.error(f"Ошибка при удалении контейнера: {e}")
+    def _delete_container():
+        time.sleep(duration * 60)  # Исправлено: duration в минутах
+        try:
+            container = client.containers.get(container_name)
+            state = container.status
+            if state == "running":
+                container.stop()  # Останавливаем контейнер, если он запущен
+            container.remove()  # Удаляем контейнер
+            st.success(f"Контейнер '{container_name}' удален по истечении времени аренды.")
+        except Exception as e:
+            st.error(f"Ошибка при удалении контейнера: {e}")
+    threading.Thread(target=_delete_container, daemon=True).start
 
 # Функция для отображения всех контейнеров
 def show_all():
@@ -133,9 +137,18 @@ def show_all():
         if not containers:
             st.write("Контейнеры не найдены")
         else:
+            status_translation = {
+                "running": "Запущен",
+                "exited": "Остановлен",
+                "paused": "Приостановлен",
+                "created": "Создан",
+                "restarting": "Перезапускается",
+                "dead": "Не работает"
+            }
             for container in containers:
                 name = container.name
                 status = container.status  # Текущее состояние контейнера
+                translated_status = status_translation.get(status, status)
                 st.write(f"- **{name}**: {status}")
     except docker.errors.DockerException as e:
         st.error(f"Ошибка подключения к Docker: {e}")
