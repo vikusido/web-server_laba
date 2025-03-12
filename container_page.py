@@ -15,6 +15,19 @@ def calculate_price(cpu, ram, duration):
     duration_cost = duration * 50
     return base_price + cpu_cost + ram_cost + duration_cost
 
+def ensure_image_exists(image_name):
+    try:
+        client.images.get(image_name)
+        st.success(f"Образ '{image_name}' найден локально.")
+    except docker.errors.ImageNotFound:
+        st.info(f"Образ '{image_name}' не найден локально. Загрузка из Docker Hub...")
+        try:
+            client.images.pull(image_name)
+            st.success(f"Образ '{image_name}' успешно загружен.")
+        except Exception as e:
+            st.error(f"Не удалось загрузить образ '{image_name}': {e}")
+            return False
+    return True
 # Функция для создания контейнера
 def create_container(cpu, ram, os_name, duration):
     container_name = f"container_{time.strftime('%Y%m%d-%H%M%S')}"
@@ -35,6 +48,7 @@ def create_container(cpu, ram, os_name, duration):
     os.makedirs(mount_path, exist_ok=True)
 
     try:
+        ensure_image_exists(image)
         container = client.containers.create(
             image=image,
             name=container_name,
