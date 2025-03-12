@@ -216,6 +216,7 @@ def manage_vm(action, vm_name):
         elif action == "delete":
             dom.undefine()
             st.session_state["vm_deleted"] = True
+            st.success(f"Виртуальная машина '{vm_name}' удалена.")
     except libvirt.libvirtError as e:
         st.error(f"Ошибка в {action} виртуальной машины: {e}")
     finally:
